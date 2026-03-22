@@ -296,7 +296,7 @@ function StrategyDetail({strategy,seller,onClose,onBuy,owned,onFollowStrategy,fo
       {/* Tabs */}
       <div style={{display:"flex",borderBottom:`1px solid ${G.border}`}}>
         {[["overview","Overview"],["preview","Preview 👀"],["includes","Includes"],["reviews",`Reviews (${reviews.length})`]].map(([t,l])=>(
-          <button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"10px 0",background:"none",border:"none",borderBottom:`2px solid ${tab==="t?G.green:"transparent"}`,fontSize:11,fontWeight:tab===t?800:500,color:tab===t?G.black:G.g400,cursor:"pointer"}}>{l}</button>
+          <button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"10px 0",background:"none",border:"none",borderBottom:`2px solid ${tab===t?G.green:"transparent"}`,fontSize:11,fontWeight:tab===t?800:500,color:tab===t?G.black:G.g400,cursor:"pointer"}}>{l}</button>
         ))}
       </div>
       <div style={{padding:"16px 18px"}}>
