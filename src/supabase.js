@@ -18,7 +18,7 @@ export const signUp = async (email, password, handle, category) => {
 
   // Create profile row
   if (data.user) {
-    await supabase.from('profiles').insert({
+    await supabase.from('Profiles').insert({
       id: data.user.id,
       handle: handle.toUpperCase(),
       email,
@@ -56,7 +56,7 @@ export const getSession = async () => {
 // ── Profile helpers ───────────────────────────────────────────────────────────
 export const getProfile = async (userId) => {
   const { data, error } = await supabase
-    .from('profiles')
+    .from('Profiles')
     .select('*')
     .eq('id', userId)
     .single()
@@ -66,7 +66,7 @@ export const getProfile = async (userId) => {
 
 export const getAllProfiles = async () => {
   const { data } = await supabase
-    .from('profiles')
+    .from('Profiles')
     .select('*')
     .order('trader_score', { ascending: false })
   return data || []
@@ -74,7 +74,7 @@ export const getAllProfiles = async () => {
 
 export const updateProfile = async (userId, updates) => {
   const { data, error } = await supabase
-    .from('profiles')
+    .from('Profiles')
     .update(updates)
     .eq('id', userId)
     .select()
@@ -187,4 +187,102 @@ export const getUserFollowing = async (userId) => {
     .eq('follower_id', userId)
     .eq('type', 'trader')
   return data?.map(f => f.following_id) || []
+}
+
+// ── Storage helpers ───────────────────────────────────────────────────────────
+export const uploadAvatar = async (userId, file) => {
+  const ext = file.name.split('.').pop()
+  const path = `avatars/${userId}.${ext}`
+  
+  const { data, error } = await supabase.storage
+    .from('avatars')
+    .upload(path, file, { upsert: true })
+  
+  if (error) throw error
+  
+  const { data: urlData } = supabase.storage
+    .from('avatars')
+    .getPublicUrl(path)
+  
+  return urlData.publicUrl
+}
+
+// ── Full profile update ───────────────────────────────────────────────────────
+export const saveProfile = async (userId, updates, avatarFile) => {
+  let avatarUrl = updates.avatarUrl
+
+  // Upload new avatar if provided
+  if (avatarFile) {
+    try {
+      avatarUrl = await uploadAvatar(userId, avatarFile)
+    } catch (e) {
+      console.log('Avatar upload failed:', e)
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({
+      bio: updates.bio,
+      category: updates.category,
+      avatar_url: avatarUrl,
+    })
+    .eq('id', userId)
+    .select()
+    .single()
+
+  if (error) throw error
+  return { ...data, avatarUrl }
+}
+
+// ── Verify trader (save metrics) ──────────────────────────────────────────────
+export const saveVerification = async (userId, metrics, category) => {
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({
+      verified: true,
+      trader_score: metrics.traderScore,
+      net_return: parseFloat(metrics.netReturn),
+      max_drawdown: parseFloat(metrics.maxDrawdown),
+      win_rate: parseFloat(metrics.winRate),
+      trade_count: metrics.tradeCount,
+      category,
+    })
+    .eq('id', userId)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+// ── Like a post ───────────────────────────────────────────────────────────────
+export const toggleLike = async (postId, currentLikes, liked) => {
+  const newLikes = liked ? currentLikes - 1 : currentLikes + 1
+  await supabase
+    .from('posts')
+    .update({ likes: newLikes })
+    .eq('id', postId)
+  return newLikes
+}
+
+// ── Add comment ───────────────────────────────────────────────────────────────
+export const addComment = async (postId, author, text) => {
+  // Comments stored as JSON in posts table for now
+  const { data: post } = await supabase
+    .from('posts')
+    .select('comments_json')
+    .eq('id', postId)
+    .single()
+  
+  const existing = post?.comments_json ? JSON.parse(post.comments_json) : []
+  const newComment = { id: Date.now(), author, text, ts: Date.now() }
+  const updated = [...existing, newComment]
+  
+  await supabase
+    .from('posts')
+    .update({ comments_json: JSON.stringify(updated) })
+    .eq('id', postId)
+  
+  return newComment
 }
