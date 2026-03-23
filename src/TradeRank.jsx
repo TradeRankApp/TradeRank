@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { supabase, signUp as sbSignUp, signIn as sbSignIn, signOut as sbSignOut, getProfile, getAllProfiles, getPosts, createPost, getStrategies, getUserPurchases, getUserFollowing, followTrader, unfollowTrader, updateProfile } from "./supabase";
+import { supabase, signUp as sbSignUp, signIn as sbSignIn, signOut as sbSignOut, getProfile, getAllProfiles, getPosts, createPost, getStrategies, getUserPurchases, getUserFollowing, followTrader, unfollowTrader, updateProfile, saveProfile, saveVerification, toggleLike } from "./supabase";
 
 // ── Premium font + design system ─────────────────────────────────────────────
 const fl=document.createElement("link");fl.rel="stylesheet";fl.href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap";document.head.appendChild(fl);
@@ -564,6 +564,96 @@ function PostComposer({onClose,onSubmit,isGuest,currentUser}){
 }
 
 // ── DM Screen ─────────────────────────────────────────────────────────────────
+// ── Edit Profile Modal ────────────────────────────────────────────────────────
+function EditProfileModal({currentUser,onClose,onSave}){
+  const [bio,setBio]=useState(currentUser?.bio||"");
+  const [category,setCategory]=useState(currentUser?.category||"Futures");
+  const [avatarPreview,setAvatarPreview]=useState(currentUser?.avatarUrl||null);
+  const [avatarFile,setAvatarFile]=useState(null);
+  const [saving,setSaving]=useState(false);
+  const fileRef=useRef();
+
+  function handleAvatar(file){
+    if(!file)return;
+    const url=URL.createObjectURL(file);
+    setAvatarPreview(url);
+    setAvatarFile(file);
+  }
+
+  async function save(){
+    setSaving(true);
+    try{
+      const result = await saveProfile(currentUser.id, {bio, category, avatarUrl: avatarPreview}, avatarFile);
+      onSave({bio, category, avatarUrl: result.avatarUrl || avatarPreview});
+    }catch(e){
+      console.log("Profile save error:", e);
+      // Still save locally if Supabase fails
+      onSave({bio, category, avatarUrl: avatarPreview});
+    }
+    setSaving(false);
+    onClose();
+  }
+
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:1000,display:"flex",alignItems:"flex-end"}} onClick={onClose}>
+    <div className="slide-up" style={{background:G.bg2,borderRadius:"22px 22px 0 0",width:"100%",maxWidth:480,margin:"0 auto",padding:"0 0 40px",maxHeight:"92vh",overflowY:"auto",border:`1px solid ${G.border}`}} onClick={e=>e.stopPropagation()}>
+      <div style={{width:32,height:3,background:G.border3,borderRadius:2,margin:"14px auto 0"}}/>
+
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px 14px",borderBottom:`1px solid ${G.border}`}}>
+        <button onClick={onClose} style={{background:"none",border:"none",color:G.g500,cursor:"pointer",fontSize:13,fontFamily:"'Inter',sans-serif"}}>Cancel</button>
+        <div style={{fontSize:15,fontWeight:700,color:"#fff",fontFamily:"'Syne',sans-serif"}}>Edit Profile</div>
+        <button onClick={save} disabled={saving} style={{background:"none",border:"none",color:G.green,cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:"'Inter',sans-serif"}}>{saving?"Saving…":"Save"}</button>
+      </div>
+
+      <div style={{padding:"24px 20px 0"}}>
+        {/* Avatar upload */}
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:28}}>
+          <div style={{position:"relative",marginBottom:12}} onClick={()=>fileRef.current?.click()}>
+            {avatarPreview
+              ?<img src={avatarPreview} alt="avatar" style={{width:88,height:88,borderRadius:"50%",objectFit:"cover",border:`2px solid ${G.green}`,cursor:"pointer"}}/>
+              :<div style={{width:88,height:88,borderRadius:"50%",background:G.bg3,border:`2px dashed ${G.border2}`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",gap:4}}>
+                <span style={{fontSize:24}}>📷</span>
+                <span style={{fontSize:10,color:G.g500,fontFamily:"'Inter',sans-serif"}}>Add photo</span>
+              </div>
+            }
+            <div style={{position:"absolute",bottom:2,right:2,width:26,height:26,borderRadius:"50%",background:G.green,display:"flex",alignItems:"center",justifyContent:"center",border:`2px solid ${G.bg2}`,cursor:"pointer"}}>
+              <span style={{fontSize:12,color:"#000"}}>✎</span>
+            </div>
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>handleAvatar(e.target.files[0])}/>
+          <button onClick={()=>fileRef.current?.click()} style={{background:"none",border:"none",color:G.green,cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"'Inter',sans-serif"}}>Change profile photo</button>
+        </div>
+
+        {/* Handle - read only */}
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:600,color:G.g500,marginBottom:6,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"'Inter',sans-serif"}}>Handle</div>
+          <div style={{padding:"13px 15px",border:`1px solid ${G.border}`,borderRadius:12,fontSize:14,color:G.g400,background:G.bg3,fontFamily:"'Syne',sans-serif"}}>{currentUser?.name?.toLowerCase()}</div>
+          <div style={{fontSize:11,color:G.g400,marginTop:4,fontFamily:"'Inter',sans-serif"}}>Your handle can't be changed</div>
+        </div>
+
+        {/* Bio */}
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:600,color:G.g500,marginBottom:6,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"'Inter',sans-serif"}}>Bio</div>
+          <textarea value={bio} onChange={e=>setBio(e.target.value.slice(0,160))} placeholder="Tell other traders about yourself…" rows={4} style={{width:"100%",padding:"13px 15px",border:`1px solid ${G.border}`,borderRadius:12,fontSize:14,color:"#fff",background:G.bg3,outline:"none",resize:"none",lineHeight:1.6,fontFamily:"'Inter',sans-serif",boxSizing:"border-box"}}/>
+          <div style={{fontSize:11,color:G.g400,marginTop:4,textAlign:"right",fontFamily:"'Inter',sans-serif"}}>{bio.length}/160</div>
+        </div>
+
+        {/* Market */}
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:11,fontWeight:600,color:G.g500,marginBottom:8,letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"'Inter',sans-serif"}}>Primary market</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {["Futures","Prop","Forex","Crypto","Stocks"].map(c=>(
+              <button key={c} onClick={()=>setCategory(c)} style={{padding:"7px 14px",borderRadius:20,border:`1px solid ${category===c?G.green:G.border}`,background:category===c?G.greenLight:G.bg3,fontSize:12,fontWeight:600,color:category===c?G.green:G.g500,cursor:"pointer",fontFamily:"'Inter',sans-serif",transition:"all 0.15s"}}>{c}</button>
+            ))}
+          </div>
+        </div>
+
+        <Btn full size="lg" onClick={save} disabled={saving}>{saving?"Saving…":"Save changes"}</Btn>
+      </div>
+    </div>
+  </div>);
+}
+
 function DMScreen({traders,onBack,openWithTrader}){
   const [dms,setDms]=useState(()=>{const base=SEED_DMS;if(openWithTrader&&!base.find(d=>d.withId===openWithTrader.id)){return[{id:Date.now(),withId:openWithTrader.id,withName:openWithTrader.name,lastMsg:"",lastTs:Date.now(),unread:0,messages:[]},...base];}return base;});
   const [active,setActive]=useState(()=>openWithTrader?dms.find(d=>d.withId===openWithTrader.id)||null:null);
@@ -1026,7 +1116,13 @@ export default function TradeRank(){
   function goProfile(t){if(!t)return;setPrevView(view);setSelectedTrader(t);setShowDMs(false);setView("profile");}
   function openDMs(trader){setDmOpenWith(trader||null);setShowDMs(true);}
   function markAllRead(){setNotifs(p=>p.map(n=>({...n,read:true})));}
-  function handleLike(id){setPosts(p=>p.map(x=>x.id===id?{...x,liked:!x.liked}:x));}
+  async function handleLike(id){
+    setPosts(p=>p.map(x=>x.id===id?{...x,liked:!x.liked}:x));
+    try{
+      const post=posts.find(p=>p.id===id);
+      if(post) await toggleLike(id, post.likes, post.liked);
+    }catch(e){console.log("Like error:",e);}
+  }
   function handleShare(id){setPosts(p=>p.map(x=>x.id===id?{...x,shared:!x.shared}:x));}
   function handleComment(id,txt){setPosts(p=>p.map(x=>x.id===id?{...x,comments:[...x.comments,{id:Date.now(),author:currentUser?.name||"YOU",text:txt,ts:Date.now()}]}:x));}
   async function handlePost(data){
@@ -1048,7 +1144,21 @@ export default function TradeRank(){
   }
   function handleDonationSuccess(){setCurrentUser(p=>({...p,supporter:true}));setTraders(p=>p.map(t=>t.id===currentUser.id?{...t,supporter:true}:t));}
   function handleCSV(file){if(!file)return;setUploadState("parsing");const r=new FileReader();r.onload=e=>{try{const rows=parseCSV(e.target.result);if(!rows.length)throw 0;const m=calcMetrics(rows);if(!m)throw 0;setMyMetrics(m);setUploadState("done");}catch{setUploadState("error");}};r.readAsText(file);}
-  function submitVerification(){if(!myMetrics||!currentUser)return;const updated={...currentUser,...myMetrics,verified:true,category:myCategory,isMe:true};setCurrentUser(updated);setTraders(p=>{const ex=p.find(t=>t.id===currentUser.id);return ex?p.map(t=>t.id===currentUser.id?updated:t):[...p,updated];});setSelectedTrader(updated);setView("profile");}
+  async function submitVerification(){
+    if(!myMetrics||!currentUser)return;
+    const updated={...currentUser,...myMetrics,verified:true,category:myCategory,isMe:true};
+    setCurrentUser(updated);
+    setTraders(p=>{const ex=p.find(t=>t.id===currentUser.id);return ex?p.map(t=>t.id===currentUser.id?updated:t):[...p,updated];});
+    setSelectedTrader(updated);
+    setView("profile");
+    // Save to Supabase
+    try{
+      await saveVerification(currentUser.id, myMetrics, myCategory);
+      console.log("Verification saved to Supabase");
+    }catch(e){
+      console.log("Verification save error:", e);
+    }
+  }
 
   if(!loggedIn)return <AuthScreen onAuth={doAuth}/>;
   if(showDMs)return(<div style={{minHeight:"100vh",background:G.white,maxWidth:480,margin:"0 auto"}}><DMScreen traders={traders} onBack={()=>{setShowDMs(false);setDmOpenWith(null);}} openWithTrader={dmOpenWith}/></div>);
@@ -1062,6 +1172,7 @@ export default function TradeRank(){
     {showDonate&&<DonationModal onClose={()=>setShowDonate(false)} onSuccess={handleDonationSuccess}/>}
     {showNotifs&&<NotifPanel notifs={notifs} onClose={()=>setShowNotifs(false)} onMarkAll={markAllRead}/>}
     {showCreateStrategy&&<CreateStrategyModal onClose={()=>setShowCreateStrategy(false)} onSubmit={()=>{}}/>}
+    {showEditProfile&&<EditProfileModal currentUser={currentUser} onClose={()=>setShowEditProfile(false)} onSave={(updates)=>{setCurrentUser(p=>({...p,...updates}));setSelectedTrader(p=>({...p,...updates}));}}/>}
 
     {/* Header */}
     <header style={{position:"sticky",top:0,zIndex:200,background:"rgba(8,8,8,0.92)",backdropFilter:"blur(20px)",borderBottom:`1px solid ${G.border}`,padding:"0 16px",height:52,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -1127,15 +1238,16 @@ export default function TradeRank(){
           <div style={{padding:"18px 16px 0"}}>
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:14}}><Avatar name={t.name} size={68} verified={t.verified} supporter={t.supporter}/>
               <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end",marginTop:4}}>
-                {!isMe&&<button onClick={()=>handleFollow(t.id)} className="btn-press" style={{padding:"8px 18px",borderRadius:20,border:`1.5px solid ${isF?G.g200:G.green}`,background:isF?G.white:G.green,fontSize:13,fontWeight:700,color:isF?G.g700:G.black,cursor:"pointer",boxShadow:isF?"none":`0 4px 12px ${G.green}40`}}>{isF?"Following":"Follow"}</button>}
-                {!isMe&&<button onClick={()=>openDMs(t)} className="btn-press" style={{padding:"8px 18px",borderRadius:20,border:`1.5px solid ${G.g200}`,background:G.white,fontSize:13,fontWeight:700,color:G.g700,cursor:"pointer"}}>Message</button>}
+                {!isMe&&<button onClick={()=>handleFollow(t.id)} className="btn-press" style={{padding:"8px 18px",borderRadius:20,border:`1px solid ${isF?G.border:G.green}`,background:isF?G.bg3:G.green,fontSize:13,fontWeight:700,color:isF?"#fff":"#000",cursor:"pointer",fontFamily:"'Inter',sans-serif",boxShadow:isF?"none":`0 4px 12px rgba(0,255,133,0.3)`}}>{isF?"Following":"Follow"}</button>}
+                {!isMe&&<button onClick={()=>openDMs(t)} className="btn-press" style={{padding:"8px 18px",borderRadius:20,border:`1px solid ${G.border}`,background:G.bg3,fontSize:13,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"'Inter',sans-serif"}}>Message</button>}
+                {isMe&&<Btn variant="ghost" size="sm" onClick={()=>setShowEditProfile(true)} icon="✎">Edit profile</Btn>}
                 {isMe&&!t.verified&&<Btn variant="outline" size="sm" onClick={()=>setView("verify")}>Get verified</Btn>}
                 {isMe&&!t.supporter&&<Btn variant="blue" size="sm" onClick={()=>setShowDonate(true)}>Support ✓</Btn>}
               </div>
             </div>
             <div style={{marginBottom:12}}><div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}><span style={{fontSize:19,fontWeight:800,color:"#fff",letterSpacing:"-0.03em"}}>{t.name.toLowerCase()}</span>{t.supporter&&<CheckBadge color={G.blue} size={16}/>}{t.verified&&!t.supporter&&<CheckBadge color={G.green} size={16}/>}</div>{t.bio&&<p style={{fontSize:13,color:G.g600,lineHeight:1.6,marginBottom:4}}>{t.bio}</p>}<div style={{fontSize:12,color:G.g400}}>{t.category}{t.traderScore>0?` · Rank #${rank}`:""}</div></div>
-            <div style={{display:"flex",borderTop:`1px solid ${G.border}`,borderBottom:`1px solid ${G.border}`,padding:"10px 0",marginBottom:14}}>{[["Posts",tp.length],["Followers",(t.followers||0).toLocaleString()],["Following",(t.following||0).toLocaleString()]].map(([k,v],i)=>(<div key={k} style={{flex:1,textAlign:"center",borderRight:i<2?`1px solid ${G.g100}`:"none"}}><div style={{fontSize:16,fontWeight:800,color:G.black}}>{v}</div><div style={{fontSize:10,color:G.g400,marginTop:1}}>{k}</div></div>))}</div>
-            {t.traderScore>0?(<div style={{background:G.bg2,borderRadius:16,padding:15,marginBottom:14,border:`1px solid ${G.border}`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:11}}><div><div style={{fontSize:9,fontWeight:700,color:G.g400,marginBottom:3,letterSpacing:"0.05em"}}>TRADERSCORE</div><div style={{display:"flex",alignItems:"baseline",gap:6}}><span style={{fontSize:32,fontWeight:800,color:tier.color,letterSpacing:"-0.04em"}}>{t.traderScore}</span><span style={{fontSize:13,fontWeight:700,color:tier.color}}>{tier.name}</span></div></div><div style={{textAlign:"right"}}><div style={{fontSize:9,fontWeight:700,color:G.g400,marginBottom:3,letterSpacing:"0.05em"}}>NET PnL</div><div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:19,fontWeight:600,color:green?G.profit:G.loss}}>{green?"+":""}{parseFloat(t.netReturn).toFixed(0)}</div></div></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:11}}>{[["WIN RATE",t.winRate+"%"],["MAX DD",t.maxDrawdown+"%"],["PROF. FACTOR",t.profitFactor]].map(([k,v])=>(<div key={k} style={{background:G.white,borderRadius:10,padding:"8px 10px",border:`1px solid ${G.border}`}}><div style={{fontSize:8,fontWeight:700,color:G.g400,marginBottom:2}}>{k}</div><div style={{fontFamily:"'DM Mono'",fontSize:13,color:G.black}}>{v}</div></div>))}</div>{t.equityCurve?.length>1&&<EquityCurve data={t.equityCurve} color={green?G.profit:G.loss} height={66}/>}</div>)
+            <div style={{display:"flex",borderTop:`1px solid ${G.border}`,borderBottom:`1px solid ${G.border}`,padding:"10px 0",marginBottom:14}}>{[["Posts",tp.length],["Followers",(t.followers||0).toLocaleString()],["Following",(t.following||0).toLocaleString()]].map(([k,v],i)=>(<div key={k} style={{flex:1,textAlign:"center",borderRight:i<2?`1px solid ${G.g100}`:"none"}}><div style={{fontSize:16,fontWeight:700,color:"#fff",fontFamily:"'JetBrains Mono',monospace"}}>{v}</div><div style={{fontSize:10,color:G.g500,marginTop:1,fontFamily:"'Inter',sans-serif",letterSpacing:"0.04em"}}>{k.toUpperCase()}</div></div>))}</div>
+            {t.traderScore>0?(<div style={{background:G.bg2,borderRadius:16,padding:15,marginBottom:14,border:`1px solid ${G.border}`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:11}}><div><div style={{fontSize:9,fontWeight:700,color:G.g400,marginBottom:3,letterSpacing:"0.05em"}}>TRADERSCORE</div><div style={{display:"flex",alignItems:"baseline",gap:6}}><span style={{fontSize:32,fontWeight:800,color:tier.color,letterSpacing:"-0.04em"}}>{t.traderScore}</span><span style={{fontSize:13,fontWeight:700,color:tier.color}}>{tier.name}</span></div></div><div style={{textAlign:"right"}}><div style={{fontSize:9,fontWeight:700,color:G.g400,marginBottom:3,letterSpacing:"0.05em"}}>NET PnL</div><div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:19,fontWeight:600,color:green?G.profit:G.loss}}>{green?"+":""}{parseFloat(t.netReturn).toFixed(0)}</div></div></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:11}}>{[["WIN RATE",t.winRate+"%"],["MAX DD",t.maxDrawdown+"%"],["PROF. FACTOR",t.profitFactor]].map(([k,v])=>(<div key={k} style={{background:G.bg3,borderRadius:10,padding:"8px 10px",border:`1px solid ${G.border}`}}><div style={{fontSize:8,fontWeight:700,color:G.g500,marginBottom:2,letterSpacing:"0.06em"}}>{k}</div><div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:13,color:"#fff"}}>{v}</div></div>))}</div>{t.equityCurve?.length>1&&<EquityCurve data={t.equityCurve} color={green?G.profit:G.loss} height={66}/>}</div>)
             :(isMe&&<div style={{background:G.greenLight,border:`1.5px solid ${G.green}30`,borderRadius:16,padding:18,marginBottom:14,textAlign:"center"}}><div style={{fontSize:26,marginBottom:8}}>📊</div><div style={{fontSize:15,fontWeight:800,color:"#fff",marginBottom:6}}>No score yet</div><p style={{fontSize:12,color:G.g600,lineHeight:1.6,marginBottom:14}}>Upload your trade history to get a TraderScore and unlock strategy sales.</p><Btn size="sm" onClick={()=>setView("verify")}>Verify my trades</Btn></div>)}
             {badges.length>0&&(<div style={{marginBottom:14}}><div style={{fontSize:10,fontWeight:700,color:G.g400,marginBottom:7,letterSpacing:"0.05em"}}>BADGES</div><div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{badges.map(bid=>{const def=BADGE_DEFS.find(b=>b.id===bid);return def?<span key={bid} style={{display:"inline-flex",alignItems:"center",gap:3,background:G.g50,border:`1px solid ${G.border}`,borderRadius:20,padding:"4px 10px",fontSize:11,fontWeight:600,color:G.g500}}>{def.icon} {def.label}</span>:null;})}</div></div>)}
             {sellerStrategies.length>0&&(<div style={{marginBottom:14}}><div style={{fontSize:10,fontWeight:700,color:G.g500,marginBottom:10,letterSpacing:"0.07em"}}>STRATEGIES FOR SALE</div>{sellerStrategies.map(s=>(<div key={s.id} onClick={()=>setView("strategies")} className="hov" style={{display:"flex",alignItems:"center",gap:11,padding:"10px 13px",borderRadius:13,background:G.g50,border:`1px solid ${G.border}`,marginBottom:8,cursor:"pointer"}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:"#fff",marginBottom:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.title}</div><div style={{display:"flex",gap:8,alignItems:"center"}}><span style={{fontSize:11,fontWeight:600,color:G.g500}}>{s.market}</span><StarRating rating={s.rating} size={11}/><span style={{fontSize:11,color:G.g400}}>{s.sales} sold</span></div></div><div style={{fontFamily:"'DM Mono'",fontSize:16,fontWeight:700,color:G.green,flexShrink:0}}>${s.price}</div></div>))}{isMe&&<Btn size="sm" variant="ghost" onClick={()=>setShowCreateStrategy(true)} icon="＋">Add strategy</Btn>}</div>)}
